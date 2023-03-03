@@ -1,0 +1,54 @@
+#!/bin/bash
+
+if [ $# != 4 ]; then
+  echo "=============================================================================================================="
+  echo "Please run the script as: "
+  echo "bash run_standalone_eval_gpu.sh DEVICE_ID RUN_MODE DATA_DIR LOAD_CHECKPOINT_PATH"
+  echo "for example of validation: bash run_standalone_eval_gpu.sh 0 val /path/rpc_dataset /path/load_ckpt"
+  echo "for example of test: bash run_standalone_eval_gpu.sh 0 test /path/rpc_dataset /path/load_ckpt"
+  echo "=============================================================================================================="
+exit 1
+fi
+
+get_real_path(){
+  if [ "${1:0:1}" == "/" ]; then
+    echo "$1"
+  else
+    realpath -m "$PWD"/"$1"
+  fi
+}
+
+DEVICE_ID=$1
+RUN_MODE=$2
+DATA_DIR=$3
+LOAD_CHECKPOINT_PATH=$4
+mkdir -p ms_log 
+PROJECT_DIR=$(cd "$(dirname "$0")" || exit; pwd)
+CUR_DIR=`pwd`
+export GLOG_log_dir=${CUR_DIR}/ms_log
+export GLOG_logtostderr=0
+export DEVICE_ID=$DEVICE_ID
+
+# install nms module from third party
+if python -c "import nms" > /dev/null 2>&1
+then
+    echo "NMS module already exits, no need reinstall."
+else
+    cd infer/sdk/external || exit
+    make
+    python3.7 setup.py install
+    cd - || exit
+fi
+
+CONFIG=$(get_real_path "$PROJECT_DIR/../config.yaml")
+
+python -u ${PROJECT_DIR}/../eval.py  \
+    --config_path $CONFIG \
+    --device_target=GPU \
+    --device_id=$DEVICE_ID \
+    --load_checkpoint_path=$LOAD_CHECKPOINT_PATH \
+    --data_dir=$DATA_DIR \
+    --run_mode=$RUN_MODE \
+    --visual_image=true \
+    --enable_eval=true \
+    --save_result_dir=./ > eval_log.txt 2>&1 &
